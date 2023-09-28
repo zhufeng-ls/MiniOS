@@ -109,6 +109,7 @@ void user_main() {
     halt();
 }
 
+// 父进程
 void sys_tasks0() {
     extern uint32_t tick;
 
@@ -137,6 +138,7 @@ static int sys_ipc_call(int type) {
     return msg.RETVAL;
 }
 
+// 子进程
 int sys_ticks() {
     return sys_ipc_call(SYS_TICKS);
 }

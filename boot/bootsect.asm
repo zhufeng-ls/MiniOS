@@ -1,11 +1,12 @@
 ; 引导扇区 FAT12
+; 这个 boot 里面是对
 
 %INCLUDE "gdt.asm" ; 段描述表定义
 
-[BITS 16]
-org 0x7c00 ; 加载地址偏移 参考http://blog.csdn.net/u011542994/article/details/46707815
+[BITS 16] ; 16位模式
+org 0x7c00 ; 代码的加载地址偏移为0x7c00。 参考http://blog.csdn.net/u011542994/article/details/46707815
 
-BS_jmpBoot      jmp   entry
+BS_jmpBoot jmp   entry             ; 跳转到代码的入口点。在这个例子中，入口点为entry标签。且 BS_jmpBoot 写不写都成
                 db    0x90
 BS_OEMName      db    "CCOSV587"        ; OEM name / 8 B
 BPB_BytsPerSec  dw    512               ; 一个扇区512字节 
@@ -36,7 +37,7 @@ loop:
     jz done
     mov ah,0x0e
     mov bx,15        
-    int 0x10        ; 打印字符
+    int 0x10        ; 打印字符,仅在实模式下使用
     jmp loop
 done:
     ret
@@ -64,27 +65,31 @@ entry:
 ; 获取内存布局
 ; http://blog.csdn.net/yes_life/article/details/6839453
 
-ARD_ENTRY equ 0x500
-ARD_COUNT equ 0x400
+ARD_ENTRY equ 0x500 ; 从cpu中获取的内存信息,存放在 0x500处.
+ARD_COUNT equ 0x400 ; 这个地址后续有在c代码中用到,写在这个地址是作者自己约定好的,因为这个地址专门用来存储内存映射信息的数量.
+
+; loadloadertest:
+;     mov si, msg_boot_test
+;     call _print16
 
 get_mem_map:
     mov dword [ARD_COUNT], 0
     mov ax, 0
     mov es, ax
     xor ebx, ebx           ; If this is the first call, EBX must contain zero.
-    mov di, ARD_ENTRY      ; ES:DI-> Buffer Pointer
+    mov di, ARD_ENTRY      ; ES:DI-> Buffer Pointer,即存储在0x500位置
 
 get_mem_map_loop:
     mov eax, 0xe820        ; code
-    mov ecx, 20            ; Buffer Size, min = 20
+    mov ecx, 20            ; Buffer Size, min = 20,存放内存映射信息的缓冲区大小为20.
     mov edx, 0x534D4150    ; Signature, edx = "SMAP"
     int 0x15
     jc get_mem_map_fail    ; Non-Carry - indicates no error
     add di, 20             ; Buffer Pointer += 20(sizeof structure)
     inc dword [ARD_COUNT]  ; Inc ADR count
-    cmp ebx, 0             ; Anything else?
-    jne get_mem_map_loop 
-    jmp get_mem_map_ok
+    cmp ebx, 0             ; 判断是否有可用的内存信息
+    jne get_mem_map_loop   ; 若有,则跳至 get_mem_map_loop
+    jmp get_mem_map_ok     ; 没有,则跳至 get_mem_map_ok
 
 get_mem_map_fail:
     mov si, msg_get_mem_map_err
@@ -129,6 +134,7 @@ retry:
     int 0x13    ; 复位 reset
     jmp next 
 
+; 将所有的程序从磁盘中读到内存,后面所有的地址代表的都是内存中的地址.
 next: 
     mov ax,es
     add ax,0x20 ; 一个扇区是512B=0x200，es是段，故再除以16，得到0x20
@@ -157,7 +163,6 @@ error:
 succ:    
     mov si,msg_succ ; 读取成功
     call _print16
-
     ; fill and load GDTR 读取全局描述符表寄存器
     ; 参考http://x86.renejeschke.de/html/file_module_x86_id_156.html
     xor eax,eax
@@ -182,10 +187,15 @@ succ:
 
     ; special, clear pipe-line and jump
     ; 前面读取软盘数据到0x8000处，现在跳转至0x8000 
+    
     jmp dword Selec_Code32_R0:0x8000 ; 自动切换段寄存器
+    
 
 msg_boot:
     db "[Bootsector] loading...",13,10,0 ; 13 10(0x0D 0x0A)是'\r \n'
+
+msg_boot_test:
+    db "[Bootsector] loading test...",13,10,0 ; 13 10(0x0D 0x0A)是'\r \n'
 msg_err:
     db "[Bootsector] error",13,10,0
 msg_succ:
@@ -197,7 +207,7 @@ msg_get_mem_map_err:
 
 GDT: ; 全局描述符表
 DESC_NULL:        Descriptor 0,       0,            0                         ; null
-DESC_CODE32_R0:   Descriptor 0,       0xfffff - 1,  DA_C+DA_32+DA_LIMIT_4K    ; uncomfirm 
+DESC_CODE32_R0:   Descriptor 0,       0xfffff - 1,  DA_C+DA_32+DA_LIMIT_4K    ; uncomfirm  
 DESC_DATA_R0:     Descriptor 0,       0xfffff - 1,  DA_DRW+DA_32+DA_LIMIT_4K  ; uncomfirm  ; 4G seg 
 DESC_VIDEO_R0:    Descriptor 0xb8000, 0xffff,       DA_DRW+DA_32              ; vram 
 
@@ -206,7 +216,8 @@ GdtPtr  dw  GdtLen - 1  ; GDT limit
         dd  0           ; GDT Base
 
 ; GDT Selector 
-Selec_Code32_R0 equ     DESC_CODE32_R0 - DESC_NULL
+; 为什么这里的段选择子从8开始,因为低3位为权限描述符,所以索引必须乘以8. 第0位是空描述符,所以索引从1开始.
+Selec_Code32_R0 equ     DESC_CODE32_R0 - DESC_NULL ; Selec_Code32_R0 = 8
 Selec_Data_R0   equ     DESC_DATA_R0   - DESC_NULL 
 Selec_Video_R0  equ     DESC_VIDEO_R0  - DESC_NULL
 

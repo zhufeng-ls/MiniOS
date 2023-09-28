@@ -58,7 +58,8 @@ void assertion_failure(char *exp, char *file, char *base_file, int line)
      * 
      * We use a forever loop to prevent the proc from going on:
      */
-    while (1);
+    while (1) {
+    }
 
     /* should never arrive here */
         __asm__ __volatile__("ud2");

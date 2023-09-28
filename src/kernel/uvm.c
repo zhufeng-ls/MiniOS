@@ -10,8 +10,12 @@ void kvm_init(pde_t *pgdir) {
     uint32_t addr;
 
     for (addr = 0; addr < pmm_size(); addr += PAGE_SIZE) {
-        // http://www.cnblogs.com/Acg-Check/p/4268136.html
-        vmm_map(pgdir, addr, addr, PTE_P | PTE_R | PTE_K); // 原本是内核空间，为实现微内核临时设为PTE_U
+      // http://www.cnblogs.com/Acg-Check/p/4268136.html
+      // TODO:
+      // 这里映射的虚拟地址和物理地址完全一样,继续进行映射是为了填充pte和pgb表?
+      vmm_map(
+          pgdir, addr, addr,
+          PTE_P | PTE_R | PTE_K);  // 原本是内核空间，为实现微内核临时设为PTE_U
     }
 }
 

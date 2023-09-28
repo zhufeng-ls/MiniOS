@@ -43,7 +43,8 @@ void idt_init() {
 
 // 设置任务状态段
 void tss_install() {
-    __asm__ volatile("ltr %%ax" : : "a"((SEL_TSS << 3)));
+  // 左移3位,是因为选择子的后三位是权限,所以索引开始计数是从第4位开始的.
+  __asm__ volatile("ltr %%ax" : : "a"((SEL_TSS << 3)));
 }
 
 // 设置TSS

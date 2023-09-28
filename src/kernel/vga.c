@@ -98,13 +98,9 @@ void putchar( char ch )
 	move_cur();
 }
 
-
-void puts( char *str )
-{
-	for (; *str != '\0'; str++ )
-		putchar( *str );
+void puts(char *str) {
+  for (; *str != '\0'; str++) putchar(*str);
 }
-
 
 void vga_setcolor( char fc, char bc )
 {

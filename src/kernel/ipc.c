@@ -4,22 +4,24 @@
 #include <print.h>
 #include <proc.h>
 
+// 调用 sys_sendrec
 extern int sendrec(int function, int src_dest, MESSAGE* msg, int caller);
 
 static void ipc_dump(int function, int src_dest, MESSAGE* msg, int caller, const char *direction) {
-    //const char *str;
-    /*switch (function) {
-        case SEND:
-            str = "[ipc] proc#%d %s send | %d --> %d(%s)\n";
-            break;
-        case RECEIVE:
-            str = "[ipc] proc#%d %s recv | %d <-- %d(%s)\n";
-            break;
-        default:
-            str = "[ipc] proc#%d %s ???? | %d <-- %d(%s)\n";
-            break;
-    }*/
-    //printk(str, proc2pid(proc), direction, caller, src_dest, (src_dest == TASK_ANY) ? "task_any" : "task_normal");
+  const char* str;
+  switch (function) {
+    case SEND:
+      str = "[ipc] proc#%d %s send | %d --> %d(%s)\n";
+      break;
+    case RECEIVE:
+      str = "[ipc] proc#%d %s recv | %d <-- %d(%s)\n";
+      break;
+    default:
+      str = "[ipc] proc#%d %s ???? | %d <-- %d(%s)\n";
+      break;
+  }
+  printk(str, proc2pid(proc), direction, caller, src_dest,
+         (src_dest == TASK_ANY) ? "task_any" : "task_normal");
 }
 
 int _sendrec(int function, int src_dest, MESSAGE* msg, int caller) {
@@ -45,35 +47,35 @@ int _sendrec(int function, int src_dest, MESSAGE* msg, int caller) {
  *****************************************************************************/
 int sys_sendrec(int function, int src_dest, MESSAGE* m, struct proc* p)
 {
-    assert(k_reenter == 0);    /* make sure we are not in ring0 */
-    assert((src_dest > 0) ||
-           src_dest == TASK_ANY ||
-           src_dest == INTERRUPT);
+  assert(k_reenter ==
+         0); /* make sure we are not in ring0. 即不在内核模式下运行,当k_reenter
+                = 0 时不在内核态 */
+  assert((src_dest > 0) || src_dest == TASK_ANY || src_dest == INTERRUPT);
 
-    int ret = 0;
-    int caller = proc2pid(p);
-    MESSAGE* mla = (MESSAGE*)va2la(caller, m); // 获取调用方消息
-    mla->source = caller;
+  int ret = 0;
+  int caller = proc2pid(p);
+  MESSAGE* mla = (MESSAGE*)va2la(caller, m);  // 获取调用方消息
+  mla->source = caller;
 
-    assert(mla->source != src_dest); //确保不向自身发消息，防止死锁
+  assert(mla->source != src_dest);  //确保不向自身发消息，防止死锁
 
-    /**
-     * Actually we have the third message type: BOTH. However, it is not
-     * allowed to be passed to the kernel directly. Kernel doesn't know
-     * it at all. It is transformed into a SEND followed by a RECEIVE
-     * by `send_recv()'.
-     */
-    if (function == SEND) {
-        ret = msg_send(p, src_dest, m); // 发送消息
-    }
-    else if (function == RECEIVE) {
-        ret = msg_receive(p, src_dest, m); // 接收消息
-    }
-    else {
-        printk("invalid function: "
-              "%d (SEND:%d, RECEIVE:%d).", function, SEND, RECEIVE);
-        assert(!"sys_sendrec failed");
-    }
+  /**
+   * Actually we have the third message type: BOTH. However, it is not
+   * allowed to be passed to the kernel directly. Kernel doesn't know
+   * it at all. It is transformed into a SEND followed by a RECEIVE
+   * by `send_recv()'.
+   */
+  if (function == SEND) {
+    ret = msg_send(p, src_dest, m);  // 发送消息
+  } else if (function == RECEIVE) {
+    ret = msg_receive(p, src_dest, m);  // 接收消息
+  } else {
+    printk(
+        "invalid function: "
+        "%d (SEND:%d, RECEIVE:%d).",
+        function, SEND, RECEIVE);
+    assert(!"sys_sendrec failed");
+  }
 
     return ret;
 }
@@ -223,6 +225,7 @@ int msg_send(struct proc* current, int dest, MESSAGE* m)
     assert(proc2pid(sender) != proc2pid(p_dest));
 
     /* check for deadlock here */
+    // 判断sender 和 dest没有互相发送消息
     if (deadlock(proc2pid(sender), dest)) {
         printk("DEADLOCK! %d --> %d\n", sender->pid, p_dest->pid);
         assert(!"DEADLOCK");

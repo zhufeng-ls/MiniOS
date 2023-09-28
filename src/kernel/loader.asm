@@ -31,7 +31,7 @@ start:
     mov gs, ax
     mov ax, SEL_KERN_DATA
     mov ss, ax
-    mov esp, 0x7c00 ; 联想到bootsect中的org 0x7c00
+    mov esp, 0x7c00 ; 联想到bootsect中的org 0x7c00, 指定栈寄存器的上限,0x7c00是物理地址
 
 ; mov the kernel to 0x100000
 [extern kernstart]
@@ -41,9 +41,9 @@ start:
     sub eax, ecx
     mov ecx, eax
     mov esi, 0x8000
-    mov edi, 0x100000
+    mov edi, 0x100000 ; 将内核加载到内存的高地址位置。防止和引导加载程序冲突
     cld
-    rep movsb
+    rep movsb 
     jmp dword SEL_KERN_CODE:go
 
 go:
@@ -77,6 +77,7 @@ outloop:
 
 msg:
     db "=== [ OS ENTRY ] ===", 0
+
 
 ; ####################### 内核专用 #######################
 
@@ -127,7 +128,7 @@ fault%1:
 %endrep
 
 ; ***** 32-47号中断 Interrupt Request int 32 - 47
-; int 0-7
+; int 0-7, MPIC
 %macro m_irq 1
 [global irq%1]
 irq%1:
@@ -153,12 +154,12 @@ irq%1:
     ret
 %endmacro
 
-; int 8-15
+; int 8-15, SPIC
 %macro m_irq2 1
 [global irq%1]
 irq%1:
     cli
-    push %1+32
+    push %1+32  ; 对应 interrupt_frame 结构体的int_no,代表中断向量偏移量
     jmp _isr_stub ; 中断处理程序
 %endmacro
 
@@ -177,9 +178,9 @@ irq%1:
 ; so please note that we can't use it 
 [global isr_unknown]
 isr_unknown:
-    cli
-    push 255
-    jmp _isr_stub ; 中断处理程序
+    cli ;禁用中断
+    push 255 ;将255错误码压入栈中,表示未知错误.
+    jmp _isr_stub ; 跳转到 _isr_stub中断处理程序
 
 
 ; ####################### 中断服务例程 #######################
@@ -192,7 +193,8 @@ _isr_stub:
     push eax
 
     ; 保存现场
-    pusha
+    ; 这里的保存现场是我们手动保存的,为了方便我们的自定义函数使用,实际上编译器会自动保存,但是弹出和恢复则需要调用 iret.
+    pusha ;将eax,ebx,ecx,edx,esi,edi,esp,ebp压入栈中
     push ds
     push es
     push fs
@@ -218,9 +220,9 @@ _isr_stub_ret:
     pop fs
     pop es
     pop ds
-    popa
-    add esp, 8
-    iret
+    popa ; 先将堆栈中的数据弹出
+    add esp, 8 ; 将前面压入的临时值弹出,即255和eax
+    iret ; IRET指令将CPU的状态恢复到中断前的状态,这里使用iret返回中断前的状态后,会继续从被中断的位置继续执行代码.
 
 save:
     pushad          ; `.
@@ -244,7 +246,7 @@ save:
     mov     gs, ax
     mov     ss, ax
     push    restart                     ;     push restart
-    jmp     [esi + 48]                  ;     return;
+    jmp     [esi + 48]                  ;     return;这里是跳转到save的入口处,即退出save. 接下来就是执行save的下一个函数,即in  al, 0x21,这里读取的是esi+48的内存里面存放的地址,而不是esi+48这个内存. 
 .1:                                     ; } else { 已经在内核栈，不需要再切换
     push    restart_reenter             ;     push restart_reenter
     jmp     [esi + 48]                  ;     return;

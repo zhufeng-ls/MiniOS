@@ -56,6 +56,7 @@ static struct proc *proc_alloc() {
             p = pp->stack;
 
             // p = page_head + 页大小 - 中断现场结构大小
+            // 栈内存是从高往低分配的.
             p = p + PAGE_SIZE - sizeof(*pp->fi);
 
             // 进程的中断现场fi 位置 = page_head + 页大小 - 中断现场结构大小
@@ -87,31 +88,37 @@ void proc_init() {
     extern char __init_start;
     extern char __init_end;
 
-    // PCB数组清零
+    // PCB数组清零,pcblist 存放了系统中所有进程的pcb信息.
     memset(pcblist, 0, sizeof(struct proc) * NPROC);
 
-    // 初始化第一个进程
+    // 初始化第一个进程,即分配一个进程pcb控制块.
+    // pmm_stack的最后一个页用做第一个进程的栈区
     pp = proc_alloc();
 
-    // 初始化一级页表
+    // 初始化一级页表,proc_alloc已分配一个页给 pp->stack
+    // 每个进程都会申请物理页框用于创建pgd.
+    // 映射会先映射内核堆栈
+    // 在后续的映射中也会申请物理页框创建pte.
     pp->pgdir = (pde_t *)pmm_alloc();
 
-    // 初始化内核堆栈
+    // 初始化内核堆栈,
     kvm_init(pp->pgdir);
 
-    // 映射内核堆栈
+    // 映射内核堆栈,内核的堆栈只有一个物理框,所以pte中新增一项就可以完成映射.
     vmm_map(pp->pgdir, (uint32_t)pp->stack, (uint32_t)pp->stack, PTE_P | PTE_R | PTE_K);
 
-    // 得到内核大小
+    // 得到用户代码入口汇编程序大小
     uint32_t size = &__init_end - &__init_start;
 
-    // 用户空间大小是4KB
+    // 用户空间大小是4KB,即我们只给pp的用户空间分配了一个页框
     pp->size = PAGE_SIZE;
 
-    // 将内核数据拷贝至映射用户空间
+    // 将用户入口代码拷贝至一个新的物理页框,并映射到用户空间的起始位置.
     uvm_init(pp->pgdir, &__init_start, size);
 
     // 拷贝中断现场，在执行完_isr_stub_ret恢复
+    // 这边cs,ds左移三位,都是用到做段选择子的.最后三位表示权限,即这里cs,ds存放的是段选择子
+    // 且es,fs,gs,ss存放的都是数据段的段选择子?
     pp->fi->cs = (SEL_SCODE << 3) | RPL_SYST; // 0x1 RPL=1
     pp->fi->ds = (SEL_SDATA << 3) | RPL_SYST; // SYS TASK
     pp->fi->es = pp->fi->ds;
@@ -120,7 +127,7 @@ void proc_init() {
     pp->fi->ss = pp->fi->ds;
     pp->fi->eflags = 0x202;
     pp->fi->user_esp = USER_BASE + PAGE_SIZE; // 堆栈顶部，因为是向下生长的
-    pp->fi->eip = USER_BASE; // 从0xc0000000开始执行
+    pp->fi->eip = USER_BASE;  // 从0xc0000000开始执行,即跳转到用户空间起始处
 
     strcpy(pp->name, "init"); // 第一个进程名为init
 
@@ -141,11 +148,12 @@ static void proc_switch(struct proc *pp) {
 }
 
 // 挑选可用进程
+// 挑选需要时间片最多的进程,然后返回
 static struct proc *proc_pick() {
     struct proc *pp, *pp_ready;
     int greatest_ticks = 0;
 
-    // 查找可用进程
+    // 查找可用进程,系统进程的ticks比用户进程高
     for (pp = &pcblist[0]; pp < &pcblist[NPROC]; pp++) {
 
         if (PROC_IS_RUNABLE(pp)) { // 进程是活动的，且不堵塞
@@ -184,25 +192,24 @@ void schedule() {
     pp_ready = 0;
 
     while (!pp_ready) {
-        
-        pp_ready = proc_pick(); // 挑选进程
+      pp_ready = proc_pick();  // 挑选进程,先挑选系统进程
 
-        if (!pp_ready) { // 所有进程时间片用完，重置
-            reset_time();
-        } else {
-            pp = pp_ready;
+      if (!pp_ready) {  // 所有进程时间片用完，重置
+        reset_time();
+      } else {
+        pp = pp_ready;
 
-            // 关中断
-            cli();
+        // 关中断
+        cli();
 
-            uvm_switch(pp); // 切换页表
-            proc_switch(pp); // 切换进程
+        uvm_switch(pp);   // 切换页表
+        proc_switch(pp);  // 切换进程
 
-            // 开中断
-            sti();
+        // 开中断
+        sti();
 
-            return;
-        }
+        return;
+      }
     }
 }
 

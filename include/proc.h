@@ -70,7 +70,7 @@ struct proc {
     char *stack;                    // 进程内核堆栈
     struct proc *parent;            // 父进程
     int8_t ticks;                   // 时间片
-    int8_t priority;                // 优先级
+    int8_t priority;  // 优先级,用户进程为0x20,系统进程为0x10
     /* IPC */
     int p_flags;                    // 标识
     MESSAGE *p_msg;                 // 消息

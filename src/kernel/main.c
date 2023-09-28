@@ -79,7 +79,10 @@ int os_main(void)
     irq_init_timer(irq_handler_clock);
 
     uvm_switch(proc);
-    restart(); // 完成中断的后半部分，从而进入init进程
+
+    // 完成中断的后半部分，从而进入init进程
+    // 通过时钟中断,触发时钟中断处理函数,然后检测到proc指向的进程改变,此刻就进行了切换.
+    restart();
 
     while (1); // handle interrupt
 

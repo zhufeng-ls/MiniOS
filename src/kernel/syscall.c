@@ -165,9 +165,12 @@ void syscall() {
 }
 
 // http://www.cnblogs.com/taek/archive/2012/02/05/2338838.html
+// 这个系统调用也是由系统自定义的,函数的入口在idt中可以找到,调用产生的中断叫做软中断,由程序主动调用.
 int call(int no) {
     volatile int ret = -1;
-    __asm__ __volatile__("mov 0x8(%ebp), %eax\n\t"
+    // ebp指向当前堆栈底的底部,偏移为0x8是因为先推入的参数,在推入的返回值,而栈是后入先出的.
+    __asm__ __volatile__(
+        "mov 0x8(%ebp), %eax\n\t"
         "int $0x80\n\t"
         "mov %eax, -0x4(%ebp)");
     return ret;

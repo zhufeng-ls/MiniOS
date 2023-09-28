@@ -75,12 +75,16 @@ fsck:
 
 # run with qemu
 run:
-	$(QEMU) -S -s \
+#	rm disboot2.asm
+#	ndisasm -o 0x7c00 bin/bootsect.bin >> disboot2.asm
+#	code disboot2.asm
+
+	$(QEMU) -s -S \
 		-drive file=bin/floppy.img,if=floppy,format=raw \
 		-drive file=bin/rootfs.img,if=ide,format=raw,cyls=18,heads=2,secs=80 \
-	    -boot a -m 64 &
-	sleep 1
-	$(GDB) -x script/gdbinit
+	    -boot a -m 64 
+	# sleep 1
+	# $(GDB) -x script/gdbinit
 
 # clean the binary file
 clean: 

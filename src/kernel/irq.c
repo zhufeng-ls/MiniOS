@@ -40,9 +40,13 @@ void *irq_routines[ISR_NIRQ] = {
 /* This installs a custom IRQ handler for the given IRQ */
 // 设置IRQ
 void irq_install(uint8_t irq, void (*handler)(struct interrupt_frame *r)) {
-    irq_disable(irq);
-    irq_routines[irq] = handler;
-    irq_enable(irq);
+  // 禁用指定的中断。这个函数的作用是屏蔽特定中断，防止在安装中断处理函数期间触发该中断。
+  irq_disable(irq);
+  // 将中断处理函数的指针 handler 存储到 irq_routines
+  // 数组中的指定位置。irq_routines
+  // 数组是一个全局数组，用于保存不同中断号对应的中断处理函数。
+  irq_routines[irq] = handler;
+  irq_enable(irq);
 }
 
 /* This clears the handler for a given IRQ */
@@ -63,7 +67,7 @@ void irq_uninstall(uint8_t irq) {
 #define PIC2_CMD    0xa0
 #define PIC2_DATA   0xa1
 
-// end of intrrupte
+// end of intrrupte 中断结束命令
 #define PIC_EOI     0x20
 
 #define ICW1_ICW4       0x01    /* ICW4 (not) needed */
@@ -78,19 +82,24 @@ void irq_uninstall(uint8_t irq) {
 #define ICW4_BUF_MASTER 0x0C    /* Buffered mode/master */
 #define ICW4_SFNM       0x10    /* Special fully nested (not) */
 
+// 初始化中断控制器。它按照特定的顺序向主 PIC 和从 PIC
+// 发送一系列初始化命令字（ICW）来设置中断控制器的配置
 void irq_remap() {
     
     /* 参考：http://wiki.osdev.org/8259_PIC */
 
+    // 开始启动初始化过程,然后才是后面的指令进行配置.
     outb(PIC1_CMD, ICW1_INIT + ICW1_ICW4);    // starts the initialization sequence (in cascade mode)
     outb(PIC2_CMD, ICW1_INIT + ICW1_ICW4);
 
+    // 设置主pic的中断向量偏移值,即表示在idt表中的索引位置(ISR_IRQ0+0)
     outb(PIC1_DATA, 0x20);                    // ICW2: Master PIC vector offset
     outb(PIC2_DATA, 0x28);                    // ICW2: Slave PIC vector offset
 
     outb(PIC1_DATA, 4);                       // ICW3: tell Master PIC that there is a slave PIC at IRQ2 (0000 0100)
     outb(PIC2_DATA, 2);                       // ICW3: tell Slave PIC its cascade identity (0000 0010)
- 
+
+    // 启用 8086/8088 兼容模式。
     outb(PIC1_DATA, ICW4_8086);
     outb(PIC2_DATA, ICW4_8086);
  
@@ -174,8 +183,13 @@ void irq_disable(uint8_t irq) {
 #define HZ             100  /* clock freq (software settable on IBM-PC) */
 
 void irq_init_timer(void (*handler)(struct interrupt_frame *r)) {
-    outb(TIMER_MODE, RATE_GENERATOR);
-    outb(TIMER0, (uint8_t) (TIMER_FREQ/HZ) );
-    outb(TIMER0, (uint8_t) ((TIMER_FREQ/HZ) >> 8));
-    irq_install(IRQ_TIMER, handler);
+  // 使用 outb 函数配置定时器模式为 RATE_GENERATOR，即以固定频率产生中断信号。
+  outb(TIMER_MODE, RATE_GENERATOR);
+  // 使用 outb 函数设置定时器的计数器初值，根据 TIMER_FREQ 和 HZ
+  // 计算得到，以确定中断频率。
+  outb(TIMER0, (uint8_t)(TIMER_FREQ / HZ));
+  outb(TIMER0, (uint8_t)((TIMER_FREQ / HZ) >> 8));
+  // 调用 irq_install 函数，将 IRQ_TIMER
+  // 和中断处理函数的地址传递给它，以安装定时器中断处理函数。
+  irq_install(IRQ_TIMER, handler);
 }

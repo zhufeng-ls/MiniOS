@@ -33,13 +33,14 @@ struct interrupt_frame {
     uint32_t eax;
 
     uint32_t ret_addr; // 返回地址
-    uint32_t int_no;
+    uint32_t int_no;   // 中断号，指示触发中断的具体类型。
 
     /* save by `int` instruction */
     uint32_t eip;
     uint32_t cs;    // 16 bits
     uint32_t eflags;
-    uint32_t user_esp;
+    uint32_t
+        user_esp;  // 用户栈指针，用于保存当前用户栈的位置。它是从高地址向低地址递减的,所以一开始就在最高的地址处
     uint32_t ss;    // 16 bits
 };    
 
